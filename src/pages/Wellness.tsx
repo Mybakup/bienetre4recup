@@ -206,6 +206,7 @@ export default function Wellness() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [filters, setFilters] = useState<Record<string, any>>({
     availability: 'all',
