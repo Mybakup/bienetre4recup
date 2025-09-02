@@ -5,29 +5,25 @@ import {
   ArrowLeft, 
   UserCircle, 
   Bell, 
-  Users, 
-  Dumbbell, 
-  Sparkles, 
+  Search,
+  Filter,
+  MapPin,
   ArrowRight,
-  Heart,
-  Zap,
-  Waves,
   Flower2,
   X,
   Star,
-  MapPin,
   Calendar,
   Clock,
   Globe,
-  MessageSquare,
-  Share2,
-  Check,
-  Award,
-  Target,
-  Zap as Lightning
+  Users,
+  Heart
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import CoachProfile from '../components/wellness/CoachProfile';
+import CategoryTabs from '../components/wellness/CategoryTabs';
+import WellnessSearch from '../components/wellness/WellnessSearch';
+import WellnessFilters from '../components/wellness/WellnessFilters';
+import { wellnessCategories } from '../data/wellnessCategories';
 
 interface Coach {
   id: string;
@@ -206,8 +202,151 @@ const coaches: Coach[] = [
 export default function Wellness() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [showNotifications, setShowNotifications] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState<Coach | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [filters, setFilters] = useState<Record<string, any>>({
+    availability: 'all',
+    price: 100,
+    location: [],
+    language: 'all',
+    rating: 'all',
+    experience: 'all'
+  });
+
+  // Filter coaches based on selected category, search query, and filters
+  const filteredCoaches = coaches.filter(coach => {
+    // Category filter
+    if (selectedCategory) {
+      const category = wellnessCategories.find(c => c.id === selectedCategory);
+      if (category) {
+        const categoryKeywords = {
+          fitness: ['fitness', 'sport', 'musculation', 'cardio', 'crossfit'],
+          nutrition: ['nutrition', 'diététique', 'alimentation'],
+          spa: ['spa', 'massage', 'relaxation', 'thérapie'],
+          yoga: ['yoga', 'méditation', 'pilates'],
+          mental: ['psychologie', 'thérapie', 'mental', 'stress'],
+          beauty: ['beauté', 'esthétique', 'soins']
+        };
+        
+        const keywords = categoryKeywords[selectedCategory as keyof typeof categoryKeywords] || [];
+        const matchesCategory = keywords.some(keyword => 
+          coach.specialty.toLowerCase().includes(keyword) ||
+          coach.services.some(service => service.toLowerCase().includes(keyword))
+        );
+        
+        if (!matchesCategory) return false;
+      }
+    }
+
+    // Search query filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = 
+        coach.name.toLowerCase().includes(query) ||
+        coach.specialty.toLowerCase().includes(query) ||
+        coach.services.some(service => service.toLowerCase().includes(query)) ||
+        coach.description.toLowerCase().includes(query);
+      
+      if (!matchesSearch) return false;
+    }
+
+    // Price filter
+    if (filters.price && coach.pricing.individual > filters.price) {
+      return false;
+    }
+
+    // Location filter
+    if (filters.location && filters.location.length > 0) {
+      const locationMap = {
+        studio: 'en studio',
+        home: 'à domicile',
+        outdoor: 'en extérieur',
+        online: 'en visio'
+      };
+      
+      const hasMatchingLocation = filters.location.some((loc: string) => 
+        coach.locations.some(coachLoc => 
+          coachLoc.toLowerCase().includes(locationMap[loc as keyof typeof locationMap] || loc)
+        )
+      );
+      
+      if (!hasMatchingLocation) return false;
+    }
+
+    // Language filter
+    if (filters.language && filters.language !== 'all') {
+      const languageMap = {
+        fr: 'français',
+        en: 'english',
+        es: 'español',
+        de: 'deutsch',
+        it: 'italiano'
+      };
+      
+      const targetLanguage = languageMap[filters.language as keyof typeof languageMap];
+      if (targetLanguage && !coach.languages.some(lang => 
+        lang.toLowerCase().includes(targetLanguage)
+      )) {
+        return false;
+      }
+    }
+
+    // Rating filter
+    if (filters.rating && filters.rating !== 'all') {
+      const minRating = parseFloat(filters.rating);
+      if (coach.rating < minRating) return false;
+    }
+
+    return true;
+  });
+
+  const handleLocationClick = () => {
+    setIsLocating(true);
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // Here you would typically update the coaches list based on location
+          console.log('Location:', position.coords);
+          setIsLocating(false);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setIsLocating(false);
+        }
+      );
+    } else {
+      setIsLocating(false);
+    }
+  };
+
+  const handleFilterChange = (filterId: string, value: any) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterId]: value
+    }));
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      availability: 'all',
+      price: 100,
+      location: [],
+      language: 'all',
+      rating: 'all',
+      experience: 'all'
+    });
+  };
+
+  const getActiveFiltersCount = () => {
+    return Object.entries(filters).filter(([key, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      if (key === 'price') return value < 100;
+      return value && value !== 'all';
+    }).length;
+  };
 
   // Animation variants
   const containerVariants = {
@@ -339,12 +478,54 @@ export default function Wellness() {
           </motion.div>
         )}
 
+        {/* Search and Filters */}
+        <motion.div 
+          className="mb-8"
+          variants={itemVariants}
+        >
+          <WellnessSearch
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onLocationClick={handleLocationClick}
+            onFilterClick={() => setShowFilters(true)}
+            isLocating={isLocating}
+            activeFiltersCount={getActiveFiltersCount()}
+          />
+        </motion.div>
+
+        {/* Category Tabs */}
+        <motion.div 
+          className="mb-8"
+          variants={itemVariants}
+        >
+          <CategoryTabs
+            selectedCategory={selectedCategory}
+            onCategorySelect={setSelectedCategory}
+          />
+        </motion.div>
+
+        {/* Results Count */}
+        <motion.div 
+          className="mb-6"
+          variants={itemVariants}
+        >
+          <p className="text-gray-600">
+            {filteredCoaches.length} coach{filteredCoaches.length > 1 ? 's' : ''} 
+            {selectedCategory && (
+              <span> en {wellnessCategories.find(c => c.id === selectedCategory)?.name.toLowerCase()}</span>
+            )}
+            {searchQuery && (
+              <span> pour "{searchQuery}"</span>
+            )}
+          </p>
+        </motion.div>
+
         {/* Coaches Grid - 2 per row */}
         <motion.div 
           className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12"
           variants={itemVariants}
         >
-          {coaches.map((coach, index) => (
+          {filteredCoaches.map((coach, index) => (
             <motion.div
               key={coach.id}
               variants={cardVariants}
@@ -483,6 +664,34 @@ export default function Wellness() {
           ))}
         </motion.div>
 
+        {/* No Results */}
+        {filteredCoaches.length === 0 && (
+          <motion.div 
+            className="text-center py-12"
+            variants={itemVariants}
+          >
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-800 mb-2">
+              Aucun coach trouvé
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Essayez de modifier vos critères de recherche ou vos filtres
+            </p>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory(null);
+                handleClearFilters();
+              }}
+              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Réinitialiser la recherche
+            </button>
+          </motion.div>
+        )}
+
         {/* Benefits Section */}
         <motion.div 
           className="bg-white/60 backdrop-blur-sm rounded-2xl p-8 border border-white/50"
@@ -500,7 +709,7 @@ export default function Wellness() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center space-y-3">
               <div className="p-4 rounded-full bg-purple-100 w-fit mx-auto">
-                <Award className="w-6 h-6 text-purple-600" />
+                <Star className="w-6 h-6 text-purple-600" />
               </div>
               <h3 className="font-semibold text-gray-800">Professionnels certifiés</h3>
               <p className="text-sm text-gray-600">
@@ -510,7 +719,7 @@ export default function Wellness() {
             
             <div className="text-center space-y-3">
               <div className="p-4 rounded-full bg-blue-100 w-fit mx-auto">
-                <Lightning className="w-6 h-6 text-blue-600" />
+                <Clock className="w-6 h-6 text-blue-600" />
               </div>
               <h3 className="font-semibold text-gray-800">Réservation instantanée</h3>
               <p className="text-sm text-gray-600">
@@ -520,7 +729,7 @@ export default function Wellness() {
             
             <div className="text-center space-y-3">
               <div className="p-4 rounded-full bg-emerald-100 w-fit mx-auto">
-                <Target className="w-6 h-6 text-emerald-600" />
+                <Heart className="w-6 h-6 text-emerald-600" />
               </div>
               <h3 className="font-semibold text-gray-800">Expérience sur-mesure</h3>
               <p className="text-sm text-gray-600">
@@ -552,6 +761,15 @@ export default function Wellness() {
           onClose={() => setSelectedCoach(null)} 
         />
       )}
+
+      {/* Wellness Filters Modal */}
+      <WellnessFilters
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+      />
     </div>
   );
 }
